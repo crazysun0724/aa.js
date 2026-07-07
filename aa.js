@@ -1,7 +1,7 @@
 //aa.js
 const aa = {
-    version: '0.18.9',
-    date: '2026/06/29 17:18',
+    version: '0.22',
+    date: '2026/07/07 16:26',
     status: 2,
     state: {
         1:'developing',
@@ -17,19 +17,33 @@ const aa = {
 aa.log();
 const win = window;
 const doc = document;
-const _rgb = ['r','g','b'];
+function isOsLight(){
+    return win.matchMedia && win.matchMedia(`(prefers-color-scheme: light)`).matches;
+}
+function isLight(){
+    const aa = doc.body.style.colorScheme;
+    return aa === 'light' || (aa !== 'dark' && isOsLight());
+}
+function switchDark(aa){
+    doc.body.style.colorScheme = aa? aa : (isLight()? 'dark' : 'light');
+}
 
+const _rgb = ['r','g','b'];
 const _tags = [
     'header','footer','main','article','section','aside','dialog','menu','nav',
     'div','span','p','br','hr','ol','ul','li',
     'table','tr','th','td',
     'form','fieldset','legend','label','pre','code','button','select','option',
     'optgroup','textarea',
-    'h1','h2','h3','h4','h5','h6','img','a'
+    'h1','h2','h3','h4','h5','h6'
 ];
 _tags.forEach(name => { win[name] = (...aa) => tag(name,...aa); });
 const _checkTypes = ['checkbox', 'radio'];
 const _numberTypes  = ['number', 'range'];
+const _numberDefaults = {
+    'number':{ value: 0,min:-Infinity,max: Infinity,step: 1 },
+    'range' :{ value: 0,min: 0,       max: 100,     step: 1 }
+};
 
 function element( aa,ab = doc){ return ab.querySelector(aa);   }
 function elements(aa,ab = doc){ return ab.querySelectorAll(aa);}
@@ -57,12 +71,12 @@ const _palette = {
     get  y (){ return this._y ||= this.z.style; }
 };
 
-function log(aa){ console.log( aa);   }
+function log(aa){ console.log( aa); }
 
 function isArray( aa){ return Array.isArray(aa);      }
-function isNumber(aa){ return Number.isFinite(aa);    }
 function isNode(  aa){ return aa instanceof Node;     }
 function isString(aa){ return typeof aa === 'string'; }
+function isNumber(aa){ return typeof aa === 'number' && !Number.isNaN(aa); }
 function isObject(aa){ return typeof aa === 'object' && !isNull(aa) && !isArray(aa) && !isNode(aa); }
 
 function isBlank( aa){ return aa === ''; }
@@ -81,9 +95,9 @@ function array(...aa){
 }
 
 function object(...aa) {
-  if(!aa.length) return {};
-  if(aa.length === 1 && isObject(aa)) return aa;
-  return Object.fromEntries(aa.map((ba,i) => [i,ba]));
+    if(!aa.length) return {};
+    if(aa.length === 1 && isObject(aa[0])) return aa;
+    return Object.fromEntries(aa.map((ba,i) => [i,ba]));
 }
 
 function string(...aa){
@@ -97,36 +111,39 @@ function string(...aa){
     },'');
 }
 
-function number(...aa) {
+function number(...aa){
     return aa.reduce((sum,ba) => {
-      if (isNumber(ba)) return sum + ba;
-      if (isArray( ba)) return sum + number(...ba);
-      if (isObject(ba)) return sum + Object.entries(ba).reduce((n,[bb,bc]) => n + number(bb,bc),0);
-      if (isString(ba)){
-          const regex = /-?\d+(?:\.\d+)?/g;
-          const numSum = (ba.match(regex) || []).map(Number).sum();
-          const remainStr = ba.replace(regex,'');
-          const charSum = Array.from(remainStr).reduce((s,char) => s + char.charCodeAt(0),0);
-          return sum + numSum + charSum;
-      }
-    return sum;
+        if (isNumber(ba)) return sum + ba;
+        if (isArray( ba)) return sum + number(...ba);
+        if (isObject(ba)) return sum + Object.entries(ba).reduce((n,[bb,bc]) => n + number(bb,bc),0);
+        if (isString(ba)){
+            const regex = /-?\d+(?:\.\d+)?/g;
+            const numSum = (ba.match(regex) || []).map(Number).sum();
+            const remainStr = ba.replace(regex,'');
+            const charSum = Array.from(remainStr).reduce((s,char) => s + char.charCodeAt(0),0);
+            return sum + numSum + charSum;
+        }
+        return sum;
     },0);
 }
 
 function color(...aa){
-    const rgb = { r: 0,g: 0,b: 0 };
-    const setPalette = () => _palette.set(`rgb(${rgb.r},${rgb.g},${rgb.b})`);
-    const res = Object.fromEntries(_rgb.map(c => [c,{
-        get: () => rgb[c],
-        set: val => rgb[c] = number(val),
+    const rgb = { r:0,g:0,b:0 };
+    const res = Object.defineProperties({},Object.fromEntries(_rgb.map(c => [c,{
+        get:() => rgb[c],
+        set:val => rgb[c] = number(val),
         enumerable: true
-    }]));
-    Object.defineProperties(res,{
-        hex: { get(){ setPalette(); return _palette.hex; }},
-        css: { get(){ setPalette(); return _palette.css; }}
+    }])));
+    ['hex','css'].forEach(ab => {
+        Object.defineProperty(res,ab,{
+            get:() => {
+                _palette.set(`rgb(${rgb.r},${rgb.g},${rgb.b})`);
+                return _palette[ab];
+            }
+        });
     });
     res.set = (...ba) => {
-        const l = ba.length;    
+        const l = ba.length;
         if (l === 3 && ba.every(isNumber)) {
             _rgb.forEach((c,i) => rgb[c] = ba[i]);
         }else if(l > 0){
@@ -137,11 +154,11 @@ function color(...aa){
                     if(_palette.set(String(ca))){
                         t = _palette.css.match(/\d+/g).map(Number);
                     }else{
-                        const seed = number(ca) % 65535;
-                        t = [(seed * 7) % 256,(seed * 13) % 256,(seed * 17) % 256];
+                        const seed = number(ca)%65535;
+                        t = [(seed*7)%256,(seed*13)%256,(seed*17)%256];
                     }
                 }
-                _rgb.forEach((c,i) => rgb[c] = isFirst? t[i] : Math.round((rgb[c] + t[i]) / 2));
+                _rgb.forEach((c,i) => rgb[c] = isFirst? t[i] : Math.round((rgb[c]+t[i])/2));
                 isFirst = false;
             });
         }
@@ -153,8 +170,8 @@ function color(...aa){
 function parseArgs(aa){
     return aa.reduce((ab,ac) => {
         if(isObject(ac)) Object.assign(ab.props,ac);
-   else if(isArray(ac)) ab.children.push(...ac);
-   else if(isNode(ac) || isNumber(ac) || isString(ac)){
+        else if(isArray(ac)) ab.children.push(...ac);
+        else if(isNode(ac) || isNumber(ac) || isString(ac)){
             ab.children.push(ac);
         }
         return ab;
@@ -166,65 +183,91 @@ function tag(tagName,...aa){
     const el = doc.createElement(tagName);
     for(const [key,val] of Object.entries(props)){
         if(key === 'list' && isNode(val)) el.setAttribute('list',val.id);
-   else if(key.startsWith('on') || key in el) el[key] = val;
-   else el.setAttribute(key,val);
+        else if(key.startsWith('on') || key in el) el[key] = val;
+        else el.setAttribute(key,val);
     }
     return el.put(...children);
 }// /tag();
 
 const input = (() => {
     return new Proxy({},{
-        get(target, typeName){
+        get(target,typeName){
             return (...aa) => {
-                const { props, children } = parseArgs(aa);
+                const { props,children } = parseArgs(aa);
                 props.type = typeName;
-                const isNumberType = _numberTypes.includes(typeName);
                 const el = tag('input',props);
-                if(isNumberType){
-                    const numProps = {
-                        value:{ def: 0, asNumber: true },
-                        min  :{ def:-Infinity },
-                        max  :{ def: Infinity },
-                        step :{ def: 1 }
-                    };
-                    Object.keys(numProps).forEach(prop => {
-                        const { def,asNumber } = numProps[prop];
+                if(_numberTypes.includes(typeName)){
+                    const defs = _numberDefaults[typeName] || _numberDefaults['number'];
+                    const numProps = Object.keys(defs);
+                    const targetEl = toElement(props.for);
+                    el._props = props;
+                    numProps.forEach(prop => {
                         Object.defineProperty(el,prop,{
                             get(){
-                                if(asNumber) return isNaN(this.valueAsNumber)? def : this.valueAsNumber;
+                                if(prop === 'value'){
+                                    const ab = this.valueAsNumber;
+                                    return isNaN(ab)? defs[prop] : ab;
+                                }
                                 const val = this.getAttribute(prop);
-                                return val === null? def : (Number(val) || 0);
+                                return isNull(val)? defs[prop] : (Number(val) || 0);
                             },
                             set(ab){
-                                if(asNumber) this.valueAsNumber = Number(ab) || 0;
-                                else this.setAttribute(prop, String(ab));
+                                if(isNull(ab)){ this.removeAttribute(prop);
+                                              }else if(prop === 'value'){
+                                    const ac = Number(ab) || 0;
+                                    if(this.valueAsNumber !== ac){
+                                        this.valueAsNumber = ac;
+                                        this.dispatchEvent(new Event('input',{ bubbles:true }));
+                                    }
+                                }else{ this.setAttribute(prop,String(ab)); }
                             },
-                            configurable: true
+                            configurable: true,
+                            enumerable: true
                         });
-                        if(prop in props) el[prop] = props[prop];
                     });
+                    numProps.forEach(prop => {
+                        if(prop in props && !isNull(props[prop])) el[prop] = props[prop];
+                    });
+                    if(targetEl && targetEl._props){
+                        if (!('value' in targetEl._props) && 'value' in el._props) {
+                            targetEl.value = el.value;
+                        } else {
+                            el.value = targetEl.value;
+                        }
+                        let syncing = false;
+                        targetEl.on('input',() => {
+                            if(syncing) return;
+                            syncing = true;
+                            el.value = targetEl.value;
+                            syncing = false;
+                        });
+                        el.on('input',() => {
+                            if(syncing) return;
+                            syncing = true;
+                            targetEl.value = el.value;
+                            syncing = false;
+                        });
+                    }
                     if('value' in props) el.defaultValue = String(props.value);
-                    let wheelTimer = null, wheelCount = 0;
-                    el.on('mousedown', e => {
-                        if (e.button === 1){
+                    let wheelTimer = null,wheelCount = 0;
+                    el.on('mousedown',e => {
+                        if(e.button === 1){
                             e.preventDefault();
                             el.value = el.defaultValue || 0;
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
+                            el.dispatchEvent(new Event('input',{ bubbles:true }));
                         }
                     })
-                    .on('wheel', e => {
-                        e.preventDefault();
-                        clearTimeout(wheelTimer);
-                        const baseStep = el.step;
-                        let multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
-                        const amount = (e.deltaY < 0? 1 :-1) * baseStep * multiplier;
-                        el.value = (el.value + amount).clamp(el.min,el.max);
-                        el.dispatchEvent(new Event('input',{ bubbles: true }));
-                        wheelCount++;
-                        wheelTimer = setTimeout(() => { wheelCount = 0; },150);
-                    },{ passive: false });
-                    // ---------------------------------------------------------
-                } else if(typeName === 'color'){
+                        .on('wheel',e => {
+                            e.preventDefault();
+                            clearTimeout(wheelTimer);
+                            const multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
+                            const amount = (e.deltaY < 0? 1 : -1)*el.step*multiplier;
+                            el.value = (el.value + amount).clamp(el.min,el.max);
+                            el.dispatchEvent(new Event('input',{ bubbles: true }));
+                            wheelCount++;
+                            wheelTimer = setTimeout(() => wheelCount = 0,150);
+                        },{ passive: false });
+                }else if(typeName === 'color'){
                     const ba = color(el.value);
                     const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
                     Object.defineProperty(el,'value',{
@@ -237,54 +280,95 @@ const input = (() => {
                     });
                     _rgb.forEach(c => {
                         Object.defineProperty(el,c,{
-                            get: () => ba[c], 
-                            set: (ca) => {
-                                ba[c] = number(ca);
-                                nativeValue.set.call(el,ba.hex);
+                            get:() => ba[c], 
+                            set(ca){
+                                if(ba[c] !== number(ca)){
+                                    ba[c] = number(ca);
+                                    nativeValue.set.call(el,ba.hex);
+                                    this.dispatchEvent(new Event('input',{ bubbles:true }));
+                                }
                             },
                             configurable: true
                         });
                         if(c in props) el[c] = props[c];
                     });
+                    ['hex','css'].forEach(ab => {
+                        Object.defineProperty(el,ab,{
+                            get:() => ba[ab],
+                            configurable: true
+                        });
+                    });
                     el.on('input',function(){
                         ba.set(nativeValue.get.call(this));
+
                     });
-                } else if(_checkTypes.includes(typeName)){
-                    const labelEl = label(el,...children);
+                }else if(_checkTypes.includes(typeName)){
+                    const labelEl = tag('label',el,...children);
                     Object.defineProperty(labelEl,'checked',{
-                        get(){ return el.checked; },
+                        get:() => el.checked,
                         set(ab){ el.checked = Boolean(ab); },
                         configurable: true
                     });
+                    if(typeName === 'checkbox'){
+                        const nativeChecked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'checked');
+                        Object.defineProperty(el,'checked',{
+                            get(){ return this.indeterminate? null : nativeChecked.get.call(this); },
+                            set(ab){ nativeChecked.set.call(this, Boolean(ab)); },
+                            configurable: true
+                        });
+                        labelEl.on('mousedown',e => {
+                            if(e.button === 1){
+                                e.preventDefault();
+                                el.indeterminate = !el.indeterminate;
+                                el.dispatchEvent(new Event('input', { bubbles:true }));
+                                el.dispatchEvent(new Event('change',{ bubbles:true }));
+                            }
+                        });
+                    }else if(typeName === 'radio'){
+                        let wasChecked = false;
+                        labelEl.on('mousedown',() => { wasChecked = el.checked; });
+                        el.on('click',() => {
+                            if(wasChecked){
+                                el.checked = false;
+                                el.dispatchEvent(new Event('input', { bubbles:true }));
+                                el.dispatchEvent(new Event('change',{ bubbles:true }));
+                            }
+                        });
+                    }
                     return labelEl;
                 }
                 return el;
             };
         }
     });
-})();// input()
+})();
+// /input()
 
 const spin = (() => {
     return new Proxy({},{
         get(target,aa){
             const direction = { '+': 1,'-':-1 }[aa];
             if(!direction) return null;
-            return (...aa) => {
-                const { props,children } = parseArgs(aa);
-                const targetRef = props.for;
-                const customStep = !isNull(props.step)? Math.abs(Number(props.step)) : null;
+            return (...ba) => {
+                const { props,children } = parseArgs(ba);
+                const el = toElement(props.for);
+                if(!el) return;
                 delete props.for;
-                delete props.step;
-                const btn = tag('button', props, children);
+                const typeName = el.type;
+                const defs = _numberDefaults[typeName] || _numberDefaults['number'];
+                const numProps = Object.keys(defs);
+                numProps.forEach(prop => {
+                    if(isNull(props[prop])) props[prop] = el[prop] ?? defs[prop]; 
+                });
+                const amount = direction * props.step;
+                const limit = { '+': props.max, '-': props.min }[aa];
+                const btn = tag('button',props,children);
+                const syncDisabled = () => { btn.disabled = (el.value === limit); };
+                syncDisabled();
+                el.on('input', syncDisabled);
                 let holdTimer = null;
-                const update = () => {
-                    const el = toElement(targetRef);
-                    if(!el) return;
-                    const baseStep = customStep? customStep : (Number(el.step) || 1);
-                    const amount = direction * baseStep;
-                    const min = !isNull(el.min)? Number(el.min) :-Infinity;
-                    const max = !isNull(el.max)? Number(el.max) : Infinity;
-                    el.value = (el.value + amount).clamp(min,max);
+                const update = (ca) => {
+                    el.value = (isNumber(ca)? ca :(el.value + amount)).clamp(props.min,props.max);
                     el.dispatchEvent(new Event('input',{ bubbles: true }));
                 };
                 const startHold = () => {
@@ -292,35 +376,63 @@ const spin = (() => {
                     const loop = () => {
                         let delay = 200,multiplier = 1;
                         if(count > 30){ delay =  25; multiplier = 10; }
-                   else if(count > 15){ delay =  50; multiplier =  5; }
-                   else if(count >  5){ delay = 100; multiplier =  2; }
+                        else if(count > 15){ delay =  50; multiplier =  5; }
+                        else if(count >  5){ delay = 100; multiplier =  2; }
                         for(let i = 0; i < multiplier; i++){ update(); }
                         count++;
-                        holdTimer = setTimeout(loop, delay);
+                        holdTimer = setTimeout(loop,delay);
                     };
                     loop();
                 };
                 const stopHold = () => clearTimeout(holdTimer);
-                btn.on('mousedown', e => {
+                btn.on('mousedown',e => {
                     if(e.button === 0){
                         stopHold();
                         startHold();
+                    }else if(e.button === 1){
+                        stopHold();
+                        update(defs['value']);
                     }
                 })
-                .on('mouseup',stopHold)
-                .on('mouseleave',stopHold);
+                    .on('mouseup',stopHold)
+                    .on('mouseleave',stopHold)
+                    .on('contextmenu',e => {
+                        e.preventDefault();
+                        stopHold();
+                        if(Number.isFinite(limit)){ update(limit); }
+                    })
                 return btn;
             };
         }
     });
 })();// /spin();
 
+function getValue(el, prop = 'value'){
+    if(isString(el)) el = element(`[name="${el}"]`);   // ← 文字列ならnameで検索
+    const input = el?.matches?.('input,select,textarea')?
+        el : (el?.querySelector?.('input,select,textarea') ?? el);
+    switch(input?.type){
+        case 'select-multiple':
+            return array(...input.options).filter(ab => ab.selected).map(ab => ab[prop]);
+        case 'select-one':
+            return input.options[input.selectedIndex]?.[prop] ?? null;
+        case 'checkbox':
+            return array(...elements(`input[name="${input.name}"]`))
+                .filter(ab => ab.checked).map(ab => ab[prop]);
+        case 'radio':
+            return array(...elements(`input[name="${input.name}"]`))
+                .find(ab => ab.checked)?.[prop] ?? null;
+        default:
+            return input?.[prop] ?? null;
+    }
+}
+
 Object.defineProperty(Node.prototype,'on',{
     value(aa,ab,ac){
         this.addEventListener(aa,ab,ac);
         return this;
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Element.prototype,'put',{
     value(...aa){
@@ -328,30 +440,34 @@ Object.defineProperty(Element.prototype,'put',{
         this.append(...children);         
         return this;
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Element.prototype,'element',{
     value(aa){ return element(aa,this); },
-    enumerable: false,
+    enumerable:false,
 });
 Object.defineProperty(Element.prototype,'elements',{
     value(aa){ return elements(aa,this); },
-    enumerable: false,
+    enumerable:false,
+});
+Object.defineProperty(Element.prototype,'getValue',{
+    value(aa){ return getValue(this,aa); },
+    enumerable:false,
 });
 Object.defineProperty(Element.prototype,'deStyle',{
     value(prop){
         if(prop) this.style[prop] = '';
         else     this.removeAttribute('style');
-        return this;
+        return   this;
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(String.prototype,'convertBase',{
     value(aa,ab = 10,ac = 0){
         const ba = parseInt(this,aa).toString(ab).padStart(ac,'0');
         return (ab === 10 && ac === 0)? Number(ba) : ba;
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Number.prototype,'convertBase',{
     value(aa = 10,ab,ac = 0){
@@ -360,7 +476,7 @@ Object.defineProperty(Number.prototype,'convertBase',{
         const bc = parseInt(this.toString(10),10).toString(ba).padStart(bb,'0');
         return (ba === 10 && bb === 0)? Number(bc) : bc;
     },
-    enumerable: false
+    enumerable:false
 });
 
 function random(n){ return Math.floor(Math.random() * n); }
