@@ -1,7 +1,7 @@
 //aa.js
 const aa = {
-    version: '0.22',
-    date: '2026/07/07 16:26',
+    version: '0.28.1',
+    date: '2026/07/11 14:08',
     status: 2,
     state: {
         1:'developing',
@@ -33,16 +33,16 @@ const _tags = [
     'header','footer','main','article','section','aside','dialog','menu','nav',
     'div','span','p','br','hr','ol','ul','li',
     'table','tr','th','td',
-    'form','fieldset','legend','label','pre','code','button','select','option',
-    'optgroup','textarea',
+    'form','fieldset','legend','label','pre','code','button',
+    'select','datalist','option','optgroup','textarea',
     'h1','h2','h3','h4','h5','h6'
 ];
 _tags.forEach(name => { win[name] = (...aa) => tag(name,...aa); });
 const _checkTypes = ['checkbox', 'radio'];
 const _numberTypes  = ['number', 'range'];
 const _numberDefaults = {
-    'number':{ value: 0,min:-Infinity,max: Infinity,step: 1 },
-    'range' :{ value: 0,min: 0,       max: 100,     step: 1 }
+    'number':{ number: 0,min:-Infinity,max: Infinity,step: 1 },
+    'range' :{ number: 0,min: 0,       max: 100,     step: 1 }
 };
 
 function element( aa,ab = doc){ return ab.querySelector(aa);   }
@@ -54,19 +54,20 @@ function toElement(aa){
     if(isString(aa)) return id(aa) || element(aa);
     return null;
 }
+function toBit(aa){ return aa? 1 : 0; }
 const _palette = {
     set(aa){
         this.x.fillStyle = '#000000';
         this.y.color = '';
         this.y.color = aa;
-        if(this.y.color === '') return false;
+        if(isBlank(this.y.color)) return false;
         this.x.fillStyle = this.y.color;
         this.y.color = this.x.fillStyle;
         return this.y.color !== '';
     },
     get hex(){ return this.x.fillStyle; },
-    get css(){ return this.y.color; },
-    get  z (){ return this._z ||= tag('canvas'); },
+    get css(){ return this.y.color;     },
+    get  z (){ return this._z ||= tag('canvas');},
     get  x (){ return this._x ||= this.z.getContext('2d'); },
     get  y (){ return this._y ||= this.z.style; }
 };
@@ -81,6 +82,7 @@ function isObject(aa){ return typeof aa === 'object' && !isNull(aa) && !isArray(
 
 function isBlank( aa){ return aa === ''; }
 function isNull(  aa){ return aa === null || aa === undefined; }
+function isOne(   aa){ return aa === 1; }
 function isColor( aa){ return _palette.set(aa); }
 
 function array(...aa){
@@ -99,7 +101,6 @@ function object(...aa) {
     if(aa.length === 1 && isObject(aa[0])) return aa;
     return Object.fromEntries(aa.map((ba,i) => [i,ba]));
 }
-
 function string(...aa){
     return aa.reduce((res, ba) => {
         if(isString(ba) || isNumber(ba)) return res + ba;
@@ -110,7 +111,6 @@ function string(...aa){
         return res;
     },'');
 }
-
 function number(...aa){
     return aa.reduce((sum,ba) => {
         if (isNumber(ba)) return sum + ba;
@@ -126,7 +126,6 @@ function number(...aa){
         return sum;
     },0);
 }
-
 function color(...aa){
     const rgb = { r:0,g:0,b:0 };
     const res = Object.defineProperties({},Object.fromEntries(_rgb.map(c => [c,{
@@ -166,29 +165,42 @@ function color(...aa){
     };
     return res.set(...aa);
 }
-
 function parseArgs(aa){
     return aa.reduce((ab,ac) => {
         if(isObject(ac)) Object.assign(ab.props,ac);
-        else if(isArray(ac)) ab.children.push(...ac);
-        else if(isNode(ac) || isNumber(ac) || isString(ac)){
-            ab.children.push(ac);
+   else if(isArray(ac)) ab.children.push(...ac);
+   else if(isNode(ac) || isNumber(ac) || isString(ac)){
+             ab.children.push(ac);
         }
         return ab;
     },{ props:{},children:[] });
 }
+const makeId = () => string('id-',crypto.randomUUID());
 function tag(tagName,...aa){
-    if(!isString(tagName)) return null; 
+    if(!isString(tagName)) return null;
     const { props,children } = parseArgs(aa);
     const el = doc.createElement(tagName);
+    if(tagName === 'label'){
+        // clickはブラウザが勝手に送るので除外。それ以外の必要なマウスイベントを強制転送
+        ['mousedown','mouseup','mouseover','mouseout'].forEach(ev => {
+            el.on(ev, e => {
+                const target = el.control;
+                if(target && e.target !== target){
+                    target.emit(new MouseEvent(ev,e));
+//                    target.dispatchEvent(new MouseEvent(ev,e));
+                }
+            });
+        });
+    }
     for(const [key,val] of Object.entries(props)){
-        if(key === 'list' && isNode(val)) el.setAttribute('list',val.id);
-        else if(key.startsWith('on') || key in el) el[key] = val;
-        else el.setAttribute(key,val);
+        if(isNode(val) && (key === 'list' || (tagName === 'label' && key === 'for'))){
+            val.id ||= makeId();
+            el.attr(key,val.id);
+        }else if(key.startsWith('on') || key in el) el[key] = val;
+        else el.attr(key,val);
     }
     return el.put(...children);
 }// /tag();
-
 const input = (() => {
     return new Proxy({},{
         get(target,typeName){
@@ -204,22 +216,22 @@ const input = (() => {
                     numProps.forEach(prop => {
                         Object.defineProperty(el,prop,{
                             get(){
-                                if(prop === 'value'){
-                                    const ab = this.valueAsNumber;
-                                    return isNaN(ab)? defs[prop] : ab;
-                                }
-                                const val = this.getAttribute(prop);
+                                if(prop === 'number') return isNaN(this.valueAsNumber)? defs[prop] : this.valueAsNumber;
+                                const val = this.attr(prop);
                                 return isNull(val)? defs[prop] : (Number(val) || 0);
                             },
                             set(ab){
-                                if(isNull(ab)){ this.removeAttribute(prop);
-                                              }else if(prop === 'value'){
-                                    const ac = Number(ab) || 0;
-                                    if(this.valueAsNumber !== ac){
-                                        this.valueAsNumber = ac;
-                                        this.dispatchEvent(new Event('input',{ bubbles:true }));
+                                if(isNull(ab)){
+                                    this.attr(prop,null);
+                                }else if(prop === 'number'){
+                                    const newVal = Number(ab) || 0;
+                                    if(this.valueAsNumber !== newVal){
+                                        this.valueAsNumber = newVal;
+                                        this.emit(new Event('input',{ bubbles:true }));
                                     }
-                                }else{ this.setAttribute(prop,String(ab)); }
+                                }else{
+                                    this.attr(prop,String(ab));
+                                }
                             },
                             configurable: true,
                             enumerable: true
@@ -230,21 +242,21 @@ const input = (() => {
                     });
                     if(targetEl && targetEl._props){
                         if (!('value' in targetEl._props) && 'value' in el._props) {
-                            targetEl.value = el.value;
+                            targetEl.number = el.number;
                         } else {
-                            el.value = targetEl.value;
+                            el.number = targetEl.number;
                         }
                         let syncing = false;
                         targetEl.on('input',() => {
                             if(syncing) return;
                             syncing = true;
-                            el.value = targetEl.value;
+                            el.number = targetEl.number;
                             syncing = false;
                         });
                         el.on('input',() => {
                             if(syncing) return;
                             syncing = true;
-                            targetEl.value = el.value;
+                            targetEl.number = el.number;
                             syncing = false;
                         });
                     }
@@ -253,8 +265,7 @@ const input = (() => {
                     el.on('mousedown',e => {
                         if(e.button === 1){
                             e.preventDefault();
-                            el.value = el.defaultValue || 0;
-                            el.dispatchEvent(new Event('input',{ bubbles:true }));
+                            el.number = el.defaultValue || 0;
                         }
                     })
                         .on('wheel',e => {
@@ -262,8 +273,7 @@ const input = (() => {
                             clearTimeout(wheelTimer);
                             const multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
                             const amount = (e.deltaY < 0? 1 : -1)*el.step*multiplier;
-                            el.value = (el.value + amount).clamp(el.min,el.max);
-                            el.dispatchEvent(new Event('input',{ bubbles: true }));
+                            el.number = (el.number + amount).clamp(el.min,el.max);
                             wheelCount++;
                             wheelTimer = setTimeout(() => wheelCount = 0,150);
                         },{ passive: false });
@@ -285,7 +295,9 @@ const input = (() => {
                                 if(ba[c] !== number(ca)){
                                     ba[c] = number(ca);
                                     nativeValue.set.call(el,ba.hex);
-                                    this.dispatchEvent(new Event('input',{ bubbles:true }));
+//                                    this.emit('input');
+                                    this.emit(new Event('input',{ bubbles:true }));
+//                                    this.dispatchEvent(new Event('input',{ bubbles:true }));
                                 }
                             },
                             configurable: true
@@ -302,40 +314,39 @@ const input = (() => {
                         ba.set(nativeValue.get.call(this));
 
                     });
-                }else if(_checkTypes.includes(typeName)){
-                    const labelEl = tag('label',el,...children);
-                    Object.defineProperty(labelEl,'checked',{
-                        get:() => el.checked,
-                        set(ab){ el.checked = Boolean(ab); },
+                } else if (typeName === 'checkbox') {
+                    const nativeChecked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
+                    Object.defineProperty(el, 'checked', {
+                        get() { return this.mixed ? null : nativeChecked.get.call(this); },
+                        set(ab) { nativeChecked.set.call(this, Boolean(ab)); },
                         configurable: true
                     });
-                    if(typeName === 'checkbox'){
-                        const nativeChecked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'checked');
-                        Object.defineProperty(el,'checked',{
-                            get(){ return this.indeterminate? null : nativeChecked.get.call(this); },
-                            set(ab){ nativeChecked.set.call(this, Boolean(ab)); },
-                            configurable: true
-                        });
-                        labelEl.on('mousedown',e => {
-                            if(e.button === 1){
-                                e.preventDefault();
-                                el.indeterminate = !el.indeterminate;
-                                el.dispatchEvent(new Event('input', { bubbles:true }));
-                                el.dispatchEvent(new Event('change',{ bubbles:true }));
-                            }
-                        });
-                    }else if(typeName === 'radio'){
-                        let wasChecked = false;
-                        labelEl.on('mousedown',() => { wasChecked = el.checked; });
-                        el.on('click',() => {
-                            if(wasChecked){
-                                el.checked = false;
-                                el.dispatchEvent(new Event('input', { bubbles:true }));
-                                el.dispatchEvent(new Event('change',{ bubbles:true }));
-                            }
-                        });
-                    }
-                    return labelEl;
+                    let _mixed = false;
+                    el.on('mousedown', e => {
+                        log('mousedown');
+                        _mixed = el.mixed;
+                    });
+                    el.on('click', e => {
+                        if(e.shiftKey){
+                            el.mixed = _mixed = !_mixed;      // mixedを反転
+                        }
+                    });
+                    el.on('mousedown', e => {
+                        if(e.button === 1){            // 中クリックはclickではなくmousedownで拾う
+                            e.preventDefault();
+                            el.mixed = !el.mixed;      // 中クリックはchecked活性化を伴わないのでそのままでOK
+                        }
+                    });
+                }else if(typeName === 'radio'){
+                    let _checked = false;
+                    el.on('mousedown',() => {
+                        _checked = el.checked;
+                    });
+                    el.on('click',e => {
+                        if(_checked){
+                            el.checked = _checked = false;
+                        }
+                    });
                 }
                 return el;
             };
@@ -343,7 +354,6 @@ const input = (() => {
     });
 })();
 // /input()
-
 const spin = (() => {
     return new Proxy({},{
         get(target,aa){
@@ -361,15 +371,14 @@ const spin = (() => {
                     if(isNull(props[prop])) props[prop] = el[prop] ?? defs[prop]; 
                 });
                 const amount = direction * props.step;
-                const limit = { '+': props.max, '-': props.min }[aa];
+                const limit = { '+':props.max,'-':props.min }[aa];
                 const btn = tag('button',props,children);
-                const syncDisabled = () => { btn.disabled = (el.value === limit); };
+                const syncDisabled = () => { btn.disabled = (el.number === limit); };
                 syncDisabled();
-                el.on('input', syncDisabled);
+                el.on('input',syncDisabled);
                 let holdTimer = null;
                 const update = (ca) => {
-                    el.value = (isNumber(ca)? ca :(el.value + amount)).clamp(props.min,props.max);
-                    el.dispatchEvent(new Event('input',{ bubbles: true }));
+                    el.number = (isNumber(ca)? ca:(el.number+amount)).clamp(props.min,props.max);
                 };
                 const startHold = () => {
                     let count = 0;
@@ -391,7 +400,7 @@ const spin = (() => {
                         startHold();
                     }else if(e.button === 1){
                         stopHold();
-                        update(defs['value']);
+                        update(defs['number']);
                     }
                 })
                     .on('mouseup',stopHold)
@@ -406,9 +415,8 @@ const spin = (() => {
         }
     });
 })();// /spin();
-
 function getValue(el, prop = 'value'){
-    if(isString(el)) el = element(`[name="${el}"]`);   // ← 文字列ならnameで検索
+    if(isString(el)) el = element(`[name="${el}"]`);
     const input = el?.matches?.('input,select,textarea')?
         el : (el?.querySelector?.('input,select,textarea') ?? el);
     switch(input?.type){
@@ -427,9 +435,31 @@ function getValue(el, prop = 'value'){
     }
 }
 
+Object.defineProperty(Element.prototype,'attr',{
+    value(aa,ab){
+        if(arguments.length === 0) return null;
+        if(arguments.length === 1) return this.getAttribute(aa);
+        if(isNull(ab)){
+            this.removeAttribute(aa);
+        }else{
+            this.setAttribute(aa,String(ab));
+        }
+        return this;
+    },
+    configurable: true,
+    enumerable: false
+});
 Object.defineProperty(Node.prototype,'on',{
     value(aa,ab,ac){
         this.addEventListener(aa,ab,ac);
+        return this;
+    },
+    enumerable:false
+});
+Object.defineProperty(Element.prototype,'emit',{
+    value(e){
+        this.dispatchEvent(e);
+//        this.dispatchEvent(new Event(aa,{ bubbles: true }));
         return this;
     },
     enumerable:false
@@ -454,7 +484,7 @@ Object.defineProperty(Element.prototype,'getValue',{
     value(aa){ return getValue(this,aa); },
     enumerable:false,
 });
-Object.defineProperty(Element.prototype,'deStyle',{
+Object.defineProperty(Element.prototype,'diStyle',{
     value(prop){
         if(prop) this.style[prop] = '';
         else     this.removeAttribute('style');
@@ -485,13 +515,13 @@ Object.defineProperty(Array.prototype,'sum',{
     value(){
         return this.reduce((aa,ab) => aa + (isNumber(ab)? ab : 0),0);
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Array.prototype,'mean',{
     value(){
         return this.length? this.sum() / this.length : 0;  
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Array.prototype,'shuffle',{
     value(){
@@ -501,27 +531,33 @@ Object.defineProperty(Array.prototype,'shuffle',{
         }
         return this;
     },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Array.prototype,'clear',{
     value(){ this.length = 0; },
-    enumerable: false
+    enumerable:false
 });
 Object.defineProperty(Number.prototype,'clamp',{
     value(aa = 100,ab = 0){
         return Math.max(Math.min(aa,ab),Math.min(Math.max(aa,ab),this));
     },
+    enumerable:false
+});
+Object.defineProperty(HTMLInputElement.prototype,'number',{
+    get(){ return this.valueAsNumber; },
+    set(ab){ this.valueAsNumber = ab; },
+    configurable:true,
+    enumerable: false
+});
+Object.defineProperty(HTMLInputElement.prototype,'mixed',{
+    get(){ return this.indeterminate;   },
+    set(ab){ this.indeterminate = !!ab; },
+    configurable:true,
     enumerable: false
 });
 function addLoadEvent(func) {
     if(doc.readyState !== 'loading'){ func(); return; }
     win.addEventListener('DOMContentLoaded',func);
 }
-
-const datalist = (...aa) => {
-    const { props,children } = parseArgs(aa);
-    props.id = props.id || string('id-',crypto.randomUUID());
-    return tag('datalist',props,children);
-};
 
 function body(...aa){ return doc.body.put(...aa); }
