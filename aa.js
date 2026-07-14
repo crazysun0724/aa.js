@@ -1,20 +1,5 @@
 //aa.js
-const aa = {
-    version: '0.28.1',
-    date: '2026/07/11 14:08',
-    status: 2,
-    state: {
-        1:'developing',
-        2:'experimental',
-        3:'beta'
-    },
-    log(){
-        if(!this.status) return;
-        log(`aa.js ver${this.version}-${this.state[this.status]}`);
-        log(new Date());
-    }
-};
-aa.log();
+const aa = 'aa.js';
 const win = window;
 const doc = document;
 function isOsLight(){
@@ -72,7 +57,7 @@ const _palette = {
     get  y (){ return this._y ||= this.z.style; }
 };
 
-function log(aa){ console.log( aa); }
+function log(aa){ console.log(aa); }
 
 function isArray( aa){ return Array.isArray(aa);      }
 function isNode(  aa){ return aa instanceof Node;     }
@@ -181,13 +166,11 @@ function tag(tagName,...aa){
     const { props,children } = parseArgs(aa);
     const el = doc.createElement(tagName);
     if(tagName === 'label'){
-        // clickはブラウザが勝手に送るので除外。それ以外の必要なマウスイベントを強制転送
         ['mousedown','mouseup','mouseover','mouseout'].forEach(ev => {
             el.on(ev, e => {
                 const target = el.control;
                 if(target && e.target !== target){
                     target.emit(new MouseEvent(ev,e));
-//                    target.dispatchEvent(new MouseEvent(ev,e));
                 }
             });
         });
@@ -230,7 +213,7 @@ const input = (() => {
                                         this.emit(new Event('input',{ bubbles:true }));
                                     }
                                 }else{
-                                    this.attr(prop,String(ab));
+                                    this.attr(prop,ab);
                                 }
                             },
                             configurable: true,
@@ -241,7 +224,7 @@ const input = (() => {
                         if(prop in props && !isNull(props[prop])) el[prop] = props[prop];
                     });
                     if(targetEl && targetEl._props){
-                        if (!('value' in targetEl._props) && 'value' in el._props) {
+                        if(!('value' in targetEl._props) && 'value' in el._props){
                             targetEl.number = el.number;
                         } else {
                             el.number = targetEl.number;
@@ -273,31 +256,29 @@ const input = (() => {
                             clearTimeout(wheelTimer);
                             const multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
                             const amount = (e.deltaY < 0? 1 : -1)*el.step*multiplier;
-                            el.number = (el.number + amount).clamp(el.min,el.max);
+                            el.number = (el.number+amount).clamp(el.min,el.max);
                             wheelCount++;
                             wheelTimer = setTimeout(() => wheelCount = 0,150);
                         },{ passive: false });
                 }else if(typeName === 'color'){
-                    const ba = color(el.value);
-                    const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+                    const col = color(el.value);
+                    const _value = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
                     Object.defineProperty(el,'value',{
-                        get(){ return nativeValue.get.call(this); },
+                        get(){ return _value.get.call(this); },
                         set(val){
-                            ba.set(val);
-                            nativeValue.set.call(this,ba.hex);
+                            col.set(val);
+                            _value.set.call(this,col.hex);
                         },
                         configurable: true
                     });
                     _rgb.forEach(c => {
                         Object.defineProperty(el,c,{
-                            get:() => ba[c], 
+                            get:() => col[c], 
                             set(ca){
-                                if(ba[c] !== number(ca)){
-                                    ba[c] = number(ca);
-                                    nativeValue.set.call(el,ba.hex);
-//                                    this.emit('input');
+                                if(col[c] !== number(ca)){
+                                    col[c] = number(ca);
+                                    _value.set.call(el,col.hex);
                                     this.emit(new Event('input',{ bubbles:true }));
-//                                    this.dispatchEvent(new Event('input',{ bubbles:true }));
                                 }
                             },
                             configurable: true
@@ -306,46 +287,121 @@ const input = (() => {
                     });
                     ['hex','css'].forEach(ab => {
                         Object.defineProperty(el,ab,{
-                            get:() => ba[ab],
+                            get:() => col[ab],
                             configurable: true
                         });
                     });
                     el.on('input',function(){
-                        ba.set(nativeValue.get.call(this));
-
+                        col.set(_value.get.call(this));
                     });
-                } else if (typeName === 'checkbox') {
-                    const nativeChecked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked');
-                    Object.defineProperty(el, 'checked', {
-                        get() { return this.mixed ? null : nativeChecked.get.call(this); },
-                        set(ab) { nativeChecked.set.call(this, Boolean(ab)); },
+                }else if(typeName === 'checkbox'){
+                    const checked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'checked');
+                    Object.defineProperty(el,'mixed',{
+                        get(){ return this.indeterminate; },
+                        set(ab){ this.indeterminate = !!ab; },
                         configurable: true
                     });
-                    let _mixed = false;
-                    el.on('mousedown', e => {
-                        log('mousedown');
-                        _mixed = el.mixed;
+                    Object.defineProperty(el,'checked',{
+                        get(){ return this.mixed? null : checked.get.call(this); },
+                        set(ab){ checked.set.call(this,Boolean(ab)); },
+                        configurable: true
                     });
-                    el.on('click', e => {
-                        if(e.shiftKey){
-                            el.mixed = _mixed = !_mixed;      // mixedを反転
+                    const applyMixed = (wasMixed,wasChecked) => {
+                        el.mixed = !wasMixed;
+                        if(wasChecked !== undefined) el.checked = wasChecked;
+                    };
+                    let wasChecked,wasMixed;
+                    const captureState = () => {
+                        wasChecked = checked.get.call(el); // maskされてない生の値
+                        wasMixed = el.mixed;
+                    };
+                    el.on('mousedown',captureState);
+                    el.on('mouseup',e => {
+                        if(e.button === 1){
+                            e.preventDefault();
+                            applyMixed(el.mixed); // 中クリックはネイティブの横槍が無いので現在値で良い
+                            el.emit(new Event('input' ,{ bubbles:true }));
+                            el.emit(new Event('change',{ bubbles:true }));
                         }
                     });
-                    el.on('mousedown', e => {
-                        if(e.button === 1){            // 中クリックはclickではなくmousedownで拾う
-                            e.preventDefault();
-                            el.mixed = !el.mixed;      // 中クリックはchecked活性化を伴わないのでそのままでOK
+                    el.on('click',e => {
+                        if(e.shiftKey){
+                            applyMixed(wasMixed,wasChecked); // ネイティブ発火に任せるので明示emit不要
+                        }
+                    });
+                    el.on('keydown',captureState);
+                    el.on('keyup',e => {
+                        if(e.key === ' ' && e.shiftKey){
+                            applyMixed(wasMixed,wasChecked);
                         }
                     });
                 }else if(typeName === 'radio'){
-                    let _checked = false;
-                    el.on('mousedown',() => {
-                        _checked = el.checked;
-                    });
-                    el.on('click',e => {
-                        if(_checked){
-                            el.checked = _checked = false;
+                    let wasChecked = false;
+                    const captureState = () => { wasChecked = el.checked; };
+                    el.on('mousedown', captureState);
+                    el.on('keydown', captureState); // ← キーボード操作もカバー
+                    el.on('click', () => {
+                        if(wasChecked){
+                            el.checked = false;
+                            el.emit(new Event('input',{ bubbles:true }));
+                            el.emit(new Event('change',{ bubbles:true }));
                         }
+                    });
+                }else if(typeName === 'toggle'){
+                    // ブラウザには range として認識させる
+                    el.type = 'range';
+                    // 初期設定
+                    let value = ('value' in props)? props.value : 'on';
+                    el.min = 0;
+                    el.max = 1;
+                    el.style.width ||= '1.5rem'; // 外部から指定がなければデフォルト幅
+
+                    el.number = toBit(props.checked || false);
+                    let _value = el.number;
+                    let isMove = false;
+                    const setValue = () => { _value = el.number; };
+                    const matchValue = () => el.number === _value;
+                    el.on('input',() => {
+                        if(!matchValue()) isMove = true;
+                    });
+                    el.on('mouseup', () => {
+                        if(!isMove && matchValue()){
+                            el.number = toBit(!isOne(_value));
+                            el.emit(new Event('input' ,{ bubbles:true }));
+                            el.emit(new Event('change',{ bubbles:true }));
+                        }
+                        setValue();
+                        isMove = false;
+                    });
+                    el.on('change',setValue);
+                    el.on('keyup',e => {
+                        if(e.key === ' '){
+                            e.preventDefault();
+                            el.checked = !el.checked;
+                            el.emit(new Event('input' ,{ bubbles:true }));
+                            el.emit(new Event('change',{ bubbles:true }));
+                        }
+                    });
+                    el.on('wheel',e => {
+                        e.preventDefault();
+                        el.number += (e.deltaY < 0? 1 : -1);
+                        setValue();
+                        el.emit(new Event('input',{bubbles:true}));
+                    },{ passive: false });
+                    Object.defineProperty(el,'checked',{
+                        get: () => isOne(el.number),
+                        set(ab){
+                            el.number = toBit(ab);
+                            setValue();
+                        },
+                        configurable: true,
+                        enumerable: true
+                    });
+                    Object.defineProperty(el,'value',{
+                        get:() => value,
+                        set:(ab) => { value = ab; },
+                        configurable: true,
+                        enumerable: true
                     });
                 }
                 return el;
@@ -403,19 +459,19 @@ const spin = (() => {
                         update(defs['number']);
                     }
                 })
-                    .on('mouseup',stopHold)
-                    .on('mouseleave',stopHold)
-                    .on('contextmenu',e => {
-                        e.preventDefault();
-                        stopHold();
-                        if(Number.isFinite(limit)){ update(limit); }
-                    })
+                .on('mouseup',stopHold)
+                .on('mouseleave',stopHold)
+                .on('contextmenu',e => {
+                    e.preventDefault();
+                    stopHold();
+                    if(Number.isFinite(limit)){ update(limit); }
+                })
                 return btn;
             };
         }
     });
 })();// /spin();
-function getValue(el, prop = 'value'){
+function getValue(el,prop = 'value'){
     if(isString(el)) el = element(`[name="${el}"]`);
     const input = el?.matches?.('input,select,textarea')?
         el : (el?.querySelector?.('input,select,textarea') ?? el);
@@ -439,11 +495,8 @@ Object.defineProperty(Element.prototype,'attr',{
     value(aa,ab){
         if(arguments.length === 0) return null;
         if(arguments.length === 1) return this.getAttribute(aa);
-        if(isNull(ab)){
-            this.removeAttribute(aa);
-        }else{
-            this.setAttribute(aa,String(ab));
-        }
+        if(isNull(ab)) this.removeAttribute(aa);
+        else this.setAttribute(aa,String(ab));
         return this;
     },
     configurable: true,
@@ -487,26 +540,31 @@ Object.defineProperty(Element.prototype,'getValue',{
 Object.defineProperty(Element.prototype,'diStyle',{
     value(prop){
         if(prop) this.style[prop] = '';
-        else     this.removeAttribute('style');
+        else     this.attr('style',null);
         return   this;
     },
     enumerable:false
 });
-Object.defineProperty(String.prototype,'convertBase',{
-    value(aa,ab = 10,ac = 0){
-        const ba = parseInt(this,aa).toString(ab).padStart(ac,'0');
-        return (ab === 10 && ac === 0)? Number(ba) : ba;
+Object.defineProperty(String.prototype,'toBase',{
+    value(aa = 36,ab = 10,ac = 0){
+        const ba = parseInt(this,aa);
+        if (isNaN(ba)) return ba;
+        const res = ba.toString(ab).padStart(ac,'0');
+        return (ab === 10 && ac === 0) ? Number(res) : res;
     },
-    enumerable:false
+    enumerable: false
 });
-Object.defineProperty(Number.prototype,'convertBase',{
-    value(aa = 10,ab,ac = 0){
-        const ba = aa === 10? ab : aa;
-        const bb = aa === 10? ac : ab || 0;
-        const bc = parseInt(this.toString(10),10).toString(ba).padStart(bb,'0');
+Object.defineProperty(Number.prototype,'toBase',{
+    value(aa = 36,ab,ac = 0){
+        if (isNaN(this)) return NaN;
+        // 引数が2個以上ある時だけ、aa===10を「10進数からの明示的な変換元指定」として扱う
+        const isDec = arguments.length >= 2 && aa === 10;
+        const ba = isDec? (ab || 36) : aa;
+        const bb = isDec? ac : (ab || 0);
+        const bc = Math.trunc(this).toString(ba).padStart(bb,'0');
         return (ba === 10 && bb === 0)? Number(bc) : bc;
     },
-    enumerable:false
+    enumerable: false
 });
 
 function random(n){ return Math.floor(Math.random() * n); }
@@ -549,12 +607,7 @@ Object.defineProperty(HTMLInputElement.prototype,'number',{
     configurable:true,
     enumerable: false
 });
-Object.defineProperty(HTMLInputElement.prototype,'mixed',{
-    get(){ return this.indeterminate;   },
-    set(ab){ this.indeterminate = !!ab; },
-    configurable:true,
-    enumerable: false
-});
+
 function addLoadEvent(func) {
     if(doc.readyState !== 'loading'){ func(); return; }
     win.addEventListener('DOMContentLoaded',func);
