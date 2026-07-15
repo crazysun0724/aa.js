@@ -297,7 +297,7 @@ const input = (() => {
                 }else if(typeName === 'checkbox'){
                     const checked = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'checked');
                     Object.defineProperty(el,'mixed',{
-                        get(){ return this.indeterminate; },
+                        get(){   return this.indeterminate; },
                         set(ab){ this.indeterminate = !!ab; },
                         configurable: true
                     });
@@ -306,47 +306,47 @@ const input = (() => {
                         set(ab){ checked.set.call(this,Boolean(ab)); },
                         configurable: true
                     });
-                    const applyMixed = (wasMixed,wasChecked) => {
-                        el.mixed = !wasMixed;
-                        if(wasChecked !== undefined) el.checked = wasChecked;
-                    };
-                    let wasChecked,wasMixed;
+                    let _checked,_mixed;
                     const captureState = () => {
-                        wasChecked = checked.get.call(el); // maskされてない生の値
-                        wasMixed = el.mixed;
+                        _checked = checked.get.call(el);
+                        _mixed = el.mixed;
                     };
+                    const _click = () => {
+                        el.click();
+                        el.emit(new MouseEvent('click',{
+                            bubbles: true,   // イベントをバブリングさせる
+                            cancelable: true,// キャンセル可能にする
+                            shiftKey: true   // ここを true にすることで Shift を押したことにする
+                        }));
+                    }
                     el.on('mousedown',captureState);
                     el.on('mouseup',e => {
                         if(e.button === 1){
                             e.preventDefault();
-                            applyMixed(el.mixed); // 中クリックはネイティブの横槍が無いので現在値で良い
-                            el.emit(new Event('input' ,{ bubbles:true }));
-                            el.emit(new Event('change',{ bubbles:true }));
+                            _click();
                         }
                     });
                     el.on('click',e => {
                         if(e.shiftKey){
-                            applyMixed(wasMixed,wasChecked); // ネイティブ発火に任せるので明示emit不要
+                            el.mixed = !_mixed;
+                            if(_checked !== undefined) el.checked = _checked;
                         }
                     });
                     el.on('keydown',captureState);
-                    el.on('keyup',e => {
-                        if(e.key === ' ' && e.shiftKey){
-                            applyMixed(wasMixed,wasChecked);
-                        }
-                    });
+                    el.on('keyup',e => { if(e.key === ' ' && e.shiftKey){ _click(); } });
                 }else if(typeName === 'radio'){
-                    let wasChecked = false;
-                    const captureState = () => { wasChecked = el.checked; };
-                    el.on('mousedown', captureState);
-                    el.on('keydown', captureState); // ← キーボード操作もカバー
-                    el.on('click', () => {
-                        if(wasChecked){
+                    let _checked = el.checked;
+                    const captureState = () => { _checked = el.checked; };
+                    el.on('mousedown',captureState);
+                    el.on('keydown',captureState);
+                    el.on('click',()=>{
+                        if(_checked){
                             el.checked = false;
-                            el.emit(new Event('input',{ bubbles:true }));
+                            el.emit(new Event('input' ,{ bubbles:true }));
                             el.emit(new Event('change',{ bubbles:true }));
-                        }
+                        }        
                     });
+                    el.on('keyup',e => { if(e.key === ' ') el.click() });
                 }else if(typeName === 'toggle'){
                     // ブラウザには range として認識させる
                     el.type = 'range';
