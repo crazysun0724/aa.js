@@ -16,11 +16,12 @@ function switchDark(aa){
 const _rgb = ['r','g','b'];
 const _tags = [
     'header','footer','main','article','section','aside','dialog','menu','nav',
-    'div','span','p','br','hr','ol','ul','li',
+    'div','span','p','a','br','hr','ol','ul','li',
     'table','tr','th','td',
     'form','fieldset','legend','label','pre','code','button',
     'select','datalist','option','optgroup','textarea',
-    'h1','h2','h3','h4','h5','h6'
+    'h1','h2','h3','h4','h5','h6',
+    'details','summary'
 ];
 _tags.forEach(name => { win[name] = (...aa) => tag(name,...aa); });
 const _checkTypes = ['checkbox', 'radio'];
@@ -153,7 +154,7 @@ function color(...aa){
 function parseArgs(aa){
     return aa.reduce((ab,ac) => {
         if(isObject(ac)) Object.assign(ab.props,ac);
-   else if(isArray(ac)) ab.children.push(...ac);
+   else if(isArray(ac))  ab.children.push(...ac);
    else if(isNode(ac) || isNumber(ac) || isString(ac)){
              ab.children.push(ac);
         }
@@ -251,15 +252,15 @@ const input = (() => {
                             el.number = el.defaultValue || 0;
                         }
                     })
-                        .on('wheel',e => {
-                            e.preventDefault();
-                            clearTimeout(wheelTimer);
-                            const multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
-                            const amount = (e.deltaY < 0? 1 : -1)*el.step*multiplier;
-                            el.number = (el.number+amount).clamp(el.min,el.max);
-                            wheelCount++;
-                            wheelTimer = setTimeout(() => wheelCount = 0,150);
-                        },{ passive: false });
+                    .on('wheel',e => {
+                        e.preventDefault();
+                        clearTimeout(wheelTimer);
+                        const multiplier = wheelCount > 12? 10 : wheelCount > 6? 5 : wheelCount > 2? 2 : 1;
+                        const amount = (e.deltaY < 0? 1 : -1)*el.step*multiplier;
+                        el.number = (el.number+amount).clamp(el.min,el.max);
+                        wheelCount++;
+                        wheelTimer = setTimeout(() => wheelCount = 0,150);
+                    },{ passive: false });
                 }else if(typeName === 'color'){
                     const col = color(el.value);
                     const _value = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
@@ -312,12 +313,7 @@ const input = (() => {
                         _mixed = el.mixed;
                     };
                     const _click = () => {
-                        el.click();
-                        el.emit(new MouseEvent('click',{
-                            bubbles: true,   // イベントをバブリングさせる
-                            cancelable: true,// キャンセル可能にする
-                            shiftKey: true   // ここを true にすることで Shift を押したことにする
-                        }));
+                        el.emit(new MouseEvent('click',{ bubbles:true, cancelable:true, shiftKey:true }));
                     }
                     el.on('mousedown',captureState);
                     el.on('mouseup',e => {
@@ -491,17 +487,7 @@ function getValue(el,prop = 'value'){
     }
 }
 
-Object.defineProperty(Element.prototype,'attr',{
-    value(aa,ab){
-        if(arguments.length === 0) return null;
-        if(arguments.length === 1) return this.getAttribute(aa);
-        if(isNull(ab)) this.removeAttribute(aa);
-        else this.setAttribute(aa,String(ab));
-        return this;
-    },
-    configurable: true,
-    enumerable: false
-});
+
 Object.defineProperty(Node.prototype,'on',{
     value(aa,ab,ac){
         this.addEventListener(aa,ab,ac);
@@ -525,17 +511,28 @@ Object.defineProperty(Element.prototype,'put',{
     },
     enumerable:false
 });
-Object.defineProperty(Element.prototype,'element',{
+Object.defineProperty(Element.prototype,'element' ,{
     value(aa){ return element(aa,this); },
-    enumerable:false,
+    enumerable:false
 });
 Object.defineProperty(Element.prototype,'elements',{
     value(aa){ return elements(aa,this); },
-    enumerable:false,
+    enumerable:false
 });
 Object.defineProperty(Element.prototype,'getValue',{
     value(aa){ return getValue(this,aa); },
-    enumerable:false,
+    enumerable:false
+});
+Object.defineProperty(Element.prototype,'attr',{
+    value(aa,ab){
+        if(arguments.length === 0) return null;
+        if(arguments.length === 1) return this.getAttribute(aa);
+        if(isNull(ab)) this.removeAttribute(aa);
+        else this.setAttribute(aa,String(ab));
+        return this;
+    },
+    configurable: true,
+    enumerable: false
 });
 Object.defineProperty(Element.prototype,'diStyle',{
     value(prop){
@@ -550,7 +547,7 @@ Object.defineProperty(String.prototype,'toBase',{
         const ba = parseInt(this,aa);
         if (isNaN(ba)) return ba;
         const res = ba.toString(ab).padStart(ac,'0');
-        return (ab === 10 && ac === 0) ? Number(res) : res;
+        return (ab === 10 && ac === 0)? Number(res) : res;
     },
     enumerable: false
 });
@@ -603,10 +600,25 @@ Object.defineProperty(Number.prototype,'clamp',{
 });
 Object.defineProperty(HTMLInputElement.prototype,'number',{
     get(){ return this.valueAsNumber; },
-    set(ab){ this.valueAsNumber = ab; },
+    set(aa){ this.valueAsNumber = aa; },
     configurable:true,
     enumerable: false
 });
+Object.defineProperty(Storage.prototype,'item',{
+    value(key,val){
+        if(arguments.length === 1){
+            const res = this.getItem(key);
+            try{ return JSON.parse(res); }catch{ return res; }
+        }else if(isNull(val)){
+            this.removeItem(key);
+        }else{
+            this.setItem(key,isObject(val)? JSON.stringify(val) : val);
+        }
+    },
+    configurable:true,
+    enumerable: false
+});
+
 
 function addLoadEvent(func) {
     if(doc.readyState !== 'loading'){ func(); return; }
