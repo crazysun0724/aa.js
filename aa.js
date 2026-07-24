@@ -16,8 +16,8 @@ function switchDark(aa){
 const _rgb = ['r','g','b'];
 const _tags = [
     'header','footer','main','article','section','aside','dialog','menu','nav',
-    'div','span','p','a','br','hr','ol','ul','li',
-    'table','tr','th','td',
+    'div','span','p','a','br','hr','ol','ul','li','b',
+    'table','tr','th','td','dl','dd','dt',
     'form','fieldset','legend','label','pre','code','button',
     'select','datalist','option','optgroup','textarea',
     'h1','h2','h3','h4','h5','h6',
